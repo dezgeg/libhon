@@ -1,7 +1,24 @@
+-- Lua's format has %q, but it doesn't escape nonprintable chars for example
+local escapePattern = "[%c\"\\]"
+local escapeFrom = "\"\\\a\b\e\f\n\t\r\v"
+local escapeTo   = "\"\\abefntrv"
+local escapes = {}
+for i = 1, #escapeTo do
+    escapes[escapeFrom:sub(i, i)] = escapeTo:sub(i, i)
+end
+
+local function escapeHelper(s)
+    local e = escapes[s]
+    if e then return '\\' .. e
+    else return ('\\%o'):format(string.byte(s))
+    end
+end
+
 function str(x)
     local typ = type(x)
     if typ == 'string' then
-        return '"' .. x .. '"' -- TODO: escape
+        local escaped = x:gsub(escapePattern, escapeHelper)
+        return '"' .. escaped .. '"'
     elseif typ == 'function' then
         -- TODO: it might be possible to actually get the function name
         -- (even though debug.getinfo won't provide it)
@@ -44,6 +61,7 @@ p(42)
 p(nil)
 p(true)
 p('foo')
+p('\0\1tro\t"\tlol\r\t\\')
 p({})
 p({ foo = 'bar', _bar = 42 })
 p({ ['return'] = 'bad' })
