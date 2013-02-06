@@ -14,7 +14,8 @@ local function escapeHelper(s)
     end
 end
 
-local function _stringifyKeyValuePairs(result, tab, keys)
+local _stringify
+local function _stringifyKeyValuePairs(visitedTables, result, tab, keys)
     for _, k in ipairs(keys) do
         local prettyKey
         if tostring(k):match('^[%a_][%w_]*$') then
@@ -22,11 +23,11 @@ local function _stringifyKeyValuePairs(result, tab, keys)
         else
             prettyKey = '[' .. str(k) .. ']'
         end
-        table.insert(result, prettyKey .. ' = ' .. str(tab[k]))
+        table.insert(result, prettyKey .. ' = ' .. _stringify(visitedTables, tab[k]))
     end
 end
 
-local function _stringifyTable(tab)
+local function _stringifyTable(visitedTables, tab)
     local arrayKeys, hashKeys = {}, {}
     for k,v in pairs(tab) do
         if type(k) == 'number' then
@@ -41,19 +42,19 @@ local function _stringifyTable(tab)
     local parts = {}
     -- Too sparse array or non-positive indices -> stringify as key-value pairs
     if #arrayKeys == 0 or arrayKeys[1] <= 0 or arrayKeys[#arrayKeys] > 2 * #arrayKeys then
-        _stringifyKeyValuePairs(parts, tab, arrayKeys)
+        _stringifyKeyValuePairs(visitedTables, parts, tab, arrayKeys)
     else
         for i = 1, arrayKeys[#arrayKeys] do
-            table.insert(parts, str(tab[i]))
+            table.insert(parts, _stringify(visitedTables, tab[i]))
         end
     end
 
     -- Hash part
-    _stringifyKeyValuePairs(parts, tab, hashKeys)
+    _stringifyKeyValuePairs(visitedTables, parts, tab, hashKeys)
     return '{ ' .. table.concat(parts, ', ') .. ' }'
 end
 
-function str(x)
+function _stringify(visitedTables, x)
     local typ = type(x)
     if typ == 'string' then
         local escaped = x:gsub(escapePattern, escapeHelper)
@@ -63,10 +64,20 @@ function str(x)
         -- (even though debug.getinfo won't provide it)
         return '<' .. tostring(x) .. '>'
     elseif typ == 'table' then
-        return _stringifyTable(x)
+        -- Prevent infinite recursion
+        local ptr = tostring(x)
+        if visitedTables[ptr] then
+            return '<' .. ptr .. '>'
+        end
+        visitedTables[ptr] = true
+        return _stringifyTable(visitedTables, x)
     else
         return tostring(x)
     end
+end
+
+function str(x)
+    return _stringify({}, x)
 end
 
 function p(x)
@@ -86,3 +97,6 @@ p({ foo = 'bar', _bar = 42 })
 p({ ['return'] = 'bad' })
 p({ ["lol wtf"] = 'bar' })
 p(print)
+local loop = {}
+loop.loop = loop
+p(loop)
