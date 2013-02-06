@@ -81,7 +81,9 @@ function str(x)
 end
 
 function p(x)
-    print(str(x))
+    local debuginfo = debug.getinfo(2, "lS")
+    local prefix = debuginfo.short_src .. ":" .. debuginfo.currentline  .. ": "
+    print(prefix .. str(x))
 end
 
 p(42)
