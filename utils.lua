@@ -10,7 +10,7 @@ end
 local function escapeHelper(s)
     local e = escapes[s]
     if e then return '\\' .. e
-    else return ('\\%o'):format(string.byte(s))
+    else return ('\\%03o'):format(string.byte(s))
     end
 end
 
@@ -88,6 +88,7 @@ p(42)
 p(nil)
 p(true)
 p('foo')
+p('\0001')
 p('\0\1tro\t"\tlol\r\t\\')
 p({})
 p({ 1, 2, 4, 8, 16 })
