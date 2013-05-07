@@ -1,3 +1,5 @@
+local print = print
+
 -- Lua's format has %q, but it doesn't escape nonprintable chars for example
 local escapePattern = "[%c\"\\]"
 local escapeFrom = "\"\\\a\b\e\f\n\t\r\v"
@@ -51,7 +53,32 @@ local function _stringifyTable(visitedTables, tab)
 
     -- Hash part
     _stringifyKeyValuePairs(visitedTables, parts, tab, hashKeys)
-    return '{ ' .. table.concat(parts, ', ') .. ' }'
+
+    -- Split into lines
+    local lineParts = {}
+    local lineLength = 0
+    local lines = {}
+
+    for i, v in ipairs(parts) do
+        table.insert(lineParts, v)
+        lineLength = lineLength + #v
+        if lineLength >= 120 then
+            table.insert(lines, table.concat(lineParts, ', '))
+            lineLength = 0
+            lineParts = { }
+        end
+    end
+
+    if #lineParts > 0 then
+        table.insert(lines, table.concat(lineParts, ', '))
+    end
+    local prefix, suffix = '{ ', ' }'
+    if #lines > 1 then
+        prefix = "{\n  "
+        suffix = "\n}"
+    end
+
+    return prefix .. table.concat(lines, "\n  ") .. suffix
 end
 
 function _stringify(visitedTables, x)
@@ -81,25 +108,27 @@ function str(x)
 end
 
 function p(x)
-    local debuginfo = debug.getinfo(2, "lS")
-    local prefix = debuginfo.short_src .. ":" .. debuginfo.currentline  .. ": "
-    print(prefix .. str(x))
+    if debug == nil then
+        print(str(x) .. "\n")
+    else
+        local debuginfo = debug.getinfo(2, "lS")
+        local prefix = debuginfo.short_src .. ":" .. debuginfo.currentline  .. ": "
+        print(prefix .. str(x))
+    end
 end
 
-p(42)
-p(nil)
-p(true)
-p('foo')
-p('\0001')
-p('\0\1tro\t"\tlol\r\t\\')
-p({})
-p({ 1, 2, 4, 8, 16 })
-p({ 0, 1, nil, 2, nil, nil, nil, 3, nil, nil, nil, nil, nil, nil, nil, 4 })
-p({ 42, foo = 666 })
-p({ foo = 'bar', _bar = 42 })
-p({ ['return'] = 'bad' })
-p({ ["lol wtf"] = 'bar' })
-p(print)
-local loop = {}
-loop.loop = loop
-p(loop)
+-- Drawing stuff
+
+DEFAULT_COLOR = "red"
+function drawLine(startPoint, endPoint, color)
+    HoN.DrawDebugLine(startPoint, endPoint, false, color or DEFAULT_COLOR)
+end
+
+function drawCross(pos, color, size)
+  size = size or 50
+  local tl = Vector3.Create(0.5, -0.5) * size
+  local bl = Vector3.Create(0.5, 0.5) * size
+
+  drawLine(pos - tl, pos + tl, color)
+  drawLine(pos - bl, pos + bl, color)
+end
