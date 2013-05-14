@@ -16,6 +16,10 @@ local function escapeHelper(s)
     end
 end
 
+local function indent(s)
+    return s:gsub("\n", "\n    ")
+end
+
 local _stringify
 local function _stringifyKeyValuePairs(visitedTables, result, tab, keys)
     for _, k in ipairs(keys) do
@@ -25,8 +29,25 @@ local function _stringifyKeyValuePairs(visitedTables, result, tab, keys)
         else
             prettyKey = '[' .. str(k) .. ']'
         end
-        table.insert(result, prettyKey .. ' = ' .. _stringify(visitedTables, tab[k]))
+        local value = _stringify(visitedTables, tab[k])
+        local pair = '    ' .. prettyKey .. ' = ' .. indent(value)
+        table.insert(result, pair)
     end
+end
+
+-- need this since can't compare two userdatas directly
+local function comparator(a, b)
+    local typA, typB = type(a), type(b)
+
+    if typA == 'userdata' then
+        if typB ~= 'userdata' then
+            return true
+        else
+            return tostring(a) < tostring(b)
+        end
+    end
+
+    return a < b
 end
 
 local function _stringifyTable(visitedTables, tab)
@@ -38,8 +59,8 @@ local function _stringifyTable(visitedTables, tab)
             table.insert(hashKeys, k)
         end
     end
-    table.sort(arrayKeys)
-    table.sort(hashKeys)
+    table.sort(arrayKeys, comparator)
+    table.sort(hashKeys, comparator)
 
     local parts = {}
     -- Too sparse array or non-positive indices -> stringify as key-value pairs
@@ -47,38 +68,26 @@ local function _stringifyTable(visitedTables, tab)
         _stringifyKeyValuePairs(visitedTables, parts, tab, arrayKeys)
     else
         for i = 1, arrayKeys[#arrayKeys] do
-            table.insert(parts, _stringify(visitedTables, tab[i]))
+            table.insert(parts, '    ' ..
+                indent(_stringify(visitedTables, tab[i])))
         end
     end
 
     -- Hash part
     _stringifyKeyValuePairs(visitedTables, parts, tab, hashKeys)
-
-    -- Split into lines
-    local lineParts = {}
-    local lineLength = 0
-    local lines = {}
-
-    for i, v in ipairs(parts) do
-        table.insert(lineParts, v)
-        lineLength = lineLength + #v
-        if lineLength >= 120 then
-            table.insert(lines, table.concat(lineParts, ', '))
-            lineLength = 0
-            lineParts = { }
-        end
+    -- Metatable
+    local meta = getmetatable(tab)
+    if meta then
+        table.insert(parts, '    getmetatable() = ' ..
+            indent(_stringify(visitedTables, meta)))
     end
 
-    if #lineParts > 0 then
-        table.insert(lines, table.concat(lineParts, ', '))
+    if #parts == 0 then
+        return "{ }"
     end
-    local prefix, suffix = '{ ', ' }'
-    if #lines > 1 then
-        prefix = "{\n  "
-        suffix = "\n}"
-    end
+    local prefix, suffix = "{\n", "\n}"
 
-    return prefix .. table.concat(lines, "\n  ") .. suffix
+    return prefix .. table.concat(parts, ",\n") .. suffix
 end
 
 function _stringify(visitedTables, x)
@@ -92,7 +101,18 @@ function _stringify(visitedTables, x)
         return '<' .. tostring(x) .. '>'
     elseif typ == 'table' then
         -- Prevent infinite recursion
-        local ptr = tostring(x)
+        local meta = getmetatable(x)
+        local ptr
+        if meta and meta.__tostring then
+            -- Fuck you, Lua
+            local old = meta.__tostring
+            meta.__tostring = nil
+            ptr = tostring(x)
+            meta.__tostring = old
+        else
+            ptr = tostring(x)
+        end
+
         if visitedTables[ptr] then
             return '<' .. ptr .. '>'
         end
